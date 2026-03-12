@@ -1,0 +1,3 @@
+# frontend/public/.gitkeep
+# Placeholder to track the public/ directory in git.
+# Drop static assets (favicon, og-image, etc.) here.

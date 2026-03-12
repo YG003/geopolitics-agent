@@ -1,0 +1,3 @@
+// frontend/package.json
+// npm package manifest: project metadata, scripts (dev, build, preview),
+// and React/Vite dependencies for the frontend.
