@@ -1,8 +1,5 @@
-# backend/src/tools/categorize.py
-# Tool that groups a flat list of articles into named geopolitical topics
-# (e.g. "Russia-Ukraine", "South China Sea") using LLM classification.
-
 import json
+import re
 from .base import BaseTool
 
 
@@ -48,11 +45,17 @@ class CategorizeTool(BaseTool):
         }
 
     async def execute(self, input: dict):
+        raw = input["articles"]
         try:
-            articles = json.loads(input["articles"])
+            articles = json.loads(raw)
         except json.JSONDecodeError:
-            import ast
-            articles = ast.literal_eval(input["articles"])
+            arrays = re.findall(r'\[.*?\]', raw, re.DOTALL)
+            articles = []
+            for arr in arrays:
+                try:
+                    articles.extend(json.loads(arr))
+                except json.JSONDecodeError:
+                    continue
 
         for article in articles:
             article["category"] = "Other"

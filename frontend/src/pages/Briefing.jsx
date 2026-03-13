@@ -1,14 +1,18 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
+import { useNavigate } from 'react-router-dom'
 import StoryCard from '../components/StoryCard'
+import ProgressLog from '../components/ProgressLog'
 
 function Briefing() {
   const [briefing, setBriefing] = useState(null)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState(null)
+  const navigate = useNavigate()
 
   const generateBriefing = async () => {
     setLoading(true)
     setError(null)
+    setBriefing(null)
 
     try {
       const response = await fetch('http://127.0.0.1:8000/api/briefing', {
@@ -24,8 +28,7 @@ function Briefing() {
     }
   }
 
-  // Auto-trigger on page load
-  useState(() => {
+  useEffect(() => {
     generateBriefing()
   }, [])
 
@@ -33,18 +36,14 @@ function Briefing() {
     <div className="min-h-screen bg-gray-950 text-white">
       {/* Header */}
       <nav className="flex items-center justify-between px-8 py-4 border-b border-gray-800">
-        <a href="/" className="text-xl font-bold hover:text-gray-300 transition">GeoPulse</a>
+        <button onClick={() => navigate('/')} className="text-xl font-bold hover:text-gray-300 transition cursor-pointer">
+          ← GeoPulse
+        </button>
       </nav>
 
       <div className="max-w-4xl mx-auto px-4 py-8">
         {/* Loading state */}
-        {loading && (
-          <div className="text-center py-20">
-            <div className="animate-spin h-8 w-8 border-4 border-blue-500 border-t-transparent rounded-full mx-auto mb-4"></div>
-            <p className="text-gray-400 text-lg">Generating your briefing...</p>
-            <p className="text-gray-600 text-sm mt-2">This usually takes 30-60 seconds</p>
-          </div>
-        )}
+        {loading && <ProgressLog isLoading={loading} isComplete={false} />}
 
         {/* Error state */}
         {error && (
@@ -59,20 +58,15 @@ function Briefing() {
         {/* Briefing content */}
         {briefing && !loading && (
           <>
-            {/* Headline banner */}
+            {/* Header */}
             <div className="mb-8">
               <p className="text-gray-500 text-sm mb-2">
                 {new Date().toLocaleDateString('en-GB', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}
               </p>
-              <h1 className="text-3xl font-bold mb-4">{briefing.headline}</h1>
-              <p className="text-gray-300 text-lg mb-4">{briefing.executive_summary}</p>
-              <div className="flex flex-wrap gap-2">
-                {briefing.topic_tags?.map((tag, i) => (
-                  <span key={i} className="bg-gray-800 text-gray-300 px-3 py-1 rounded-full text-sm">
-                    {tag}
-                  </span>
-                ))}
-              </div>
+              <p className="text-gray-400 text-lg">
+                Here's your daily intelligence briefing — the most significant geopolitical
+                developments from the past 24 hours, summarised and analysed by our AI agent.
+              </p>
             </div>
 
             {/* Story cards */}
@@ -84,6 +78,12 @@ function Briefing() {
           </>
         )}
       </div>
+
+      {/* Footer */}
+      <footer className="text-center text-gray-700 text-xs py-3 border-t border-gray-800">
+        Built by Yaseen Gheedan — Powered by Claude &amp; NewsAPI
+      </footer>
+      
     </div>
   )
 }

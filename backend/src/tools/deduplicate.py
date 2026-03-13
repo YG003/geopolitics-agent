@@ -1,8 +1,5 @@
-# backend/src/tools/deduplicate.py
-# Tool that removes duplicate or near-duplicate articles from a list,
-# using URL matching and semantic similarity to collapse redundant coverage.
-
 import json
+import re
 from .base import BaseTool
 
 
@@ -32,12 +29,20 @@ class DeduplicateTool(BaseTool):
         }
 
     async def execute(self, input: dict):
+        raw = input["articles"]
+
+        # Handle concatenated JSON arrays like [...][...][...]
         try:
-            articles = json.loads(input["articles"])
+            articles = json.loads(raw)
         except json.JSONDecodeError:
-            # Claude sometimes passes Python-style strings instead of JSON
-            import ast
-            articles = ast.literal_eval(input["articles"])
+            # Find all JSON arrays and merge them
+            arrays = re.findall(r'\[.*?\]', raw, re.DOTALL)
+            articles = []
+            for arr in arrays:
+                try:
+                    articles.extend(json.loads(arr))
+                except json.JSONDecodeError:
+                    continue
 
         seen_titles = set()
         unique = []

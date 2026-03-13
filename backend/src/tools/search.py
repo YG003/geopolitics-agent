@@ -53,7 +53,7 @@ class SearchNewsTool(BaseTool):
                         "q": query,
                         "sortBy": sort_by,
                         "language": "en",
-                        "pageSize": 10,
+                        "pageSize": 3,
                         "apiKey": self.api_key
                     }
                 )

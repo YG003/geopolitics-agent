@@ -24,13 +24,13 @@ class Agent:
                        "by calling tools. DO NOT respond with text explaining what you plan to "
                        "do. Instead, call the appropriate tool immediately.\n\n"
                        "Workflow:\n"
-                       "1. Call search_news exactly 3 times with different queries\n"
+                       "1. Call search_news exactly 2 times with different queries\n"
                        "2. Call deduplicate with all collected articles\n"
                        "3. Call categorize with the deduplicated articles\n"
                        "4. Call summarize with the categorized articles\n"
                        "5. ONLY after all 4 tool types have been called, return the final JSON briefing\n\n"
                        "IMPORTANT: After receiving tool results, immediately call the next tool. "
-                       "Do NOT call search_news more than 3 times. "
+                       "Do NOT call search_news more than 2 times. "
                        "Never return plain text until step 5.",
                 tools=self.tools,
                 messages=messages
