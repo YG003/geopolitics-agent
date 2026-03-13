@@ -32,7 +32,13 @@ class DeduplicateTool(BaseTool):
         }
 
     async def execute(self, input: dict):
-        articles = json.loads(input["articles"])
+        try:
+            articles = json.loads(input["articles"])
+        except json.JSONDecodeError:
+            # Claude sometimes passes Python-style strings instead of JSON
+            import ast
+            articles = ast.literal_eval(input["articles"])
+
         seen_titles = set()
         unique = []
 

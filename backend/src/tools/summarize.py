@@ -36,7 +36,11 @@ class SummarizeTool(BaseTool):
         }
 
     async def execute(self, input: dict):
-        articles = json.loads(input["articles"])
+        try:
+            articles = json.loads(input["articles"])
+        except json.JSONDecodeError:
+            import ast
+            articles = ast.literal_eval(input["articles"])
         summarized = []
 
         for article in articles:

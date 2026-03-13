@@ -2,6 +2,7 @@
 # Tool that queries the NewsAPI to fetch recent geopolitics articles
 # based on keywords, categories, or date ranges supplied by the agent.
 
+import json
 import httpx
 from .base import BaseTool
 
@@ -44,32 +45,36 @@ class SearchNewsTool(BaseTool):
         query = input["query"]
         sort_by = input.get("sort_by", "publishedAt")
 
-        async with httpx.AsyncClient() as client:
-            response = await client.get(
-                self.base_url,
-                params={
-                    "q": query,
-                    "sortBy": sort_by,
-                    "language": "en",
-                    "pageSize": 10,
-                    "apiKey": self.api_key
-                }
-            )
+        try:
+            async with httpx.AsyncClient(timeout=30.0) as client:
+                response = await client.get(
+                    self.base_url,
+                    params={
+                        "q": query,
+                        "sortBy": sort_by,
+                        "language": "en",
+                        "pageSize": 10,
+                        "apiKey": self.api_key
+                    }
+                )
 
-        data = response.json()
+            data = response.json()
 
-        if data.get("status") != "ok":
-            return f"Error: {data.get('message', 'Unknown error')}"
+            if data.get("status") != "ok":
+                return f"Error: {data.get('message', 'Unknown error')}"
 
-        articles = []
-        for article in data.get("articles", []):
-            articles.append({
-                "title": article.get("title", ""),
-                "description": article.get("description", ""),
-                "source_name": article.get("source", {}).get("name", ""),
-                "url": article.get("url", ""),
-                "published_at": article.get("publishedAt", ""),
-                "image_url": article.get("urlToImage")
-            })
+            articles = []
+            for article in data.get("articles", []):
+                articles.append({
+                    "title": article.get("title", ""),
+                    "description": article.get("description", ""),
+                    "source_name": article.get("source", {}).get("name", ""),
+                    "url": article.get("url", ""),
+                    "published_at": article.get("publishedAt", ""),
+                    "image_url": article.get("urlToImage")
+                })
 
-        return articles
+            return json.dumps(articles)
+
+        except Exception as e:
+            return f"Error searching news: {str(e)}"

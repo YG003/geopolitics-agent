@@ -48,7 +48,11 @@ class CategorizeTool(BaseTool):
         }
 
     async def execute(self, input: dict):
-        articles = json.loads(input["articles"])
+        try:
+            articles = json.loads(input["articles"])
+        except json.JSONDecodeError:
+            import ast
+            articles = ast.literal_eval(input["articles"])
 
         for article in articles:
             article["category"] = "Other"
