@@ -14,23 +14,43 @@ class Agent:
 
     async def run(self, goal: str):
         messages = [{"role": "user", "content": goal}]
+        tool_calls_made = 0
 
         while True:
             response = self.client.messages.create(
                 model=self.model,
-                max_tokens=4096,
+                max_tokens=8192,
+                system="You are an autonomous AI agent. You MUST complete the entire workflow "
+                       "by calling tools. DO NOT respond with text explaining what you plan to "
+                       "do. Instead, call the appropriate tool immediately.\n\n"
+                       "Workflow:\n"
+                       "1. Call search_news exactly 3 times with different queries\n"
+                       "2. Call deduplicate with all collected articles\n"
+                       "3. Call categorize with the deduplicated articles\n"
+                       "4. Call summarize with the categorized articles\n"
+                       "5. ONLY after all 4 tool types have been called, return the final JSON briefing\n\n"
+                       "IMPORTANT: After receiving tool results, immediately call the next tool. "
+                       "Do NOT call search_news more than 3 times. "
+                       "Never return plain text until step 5.",
                 tools=self.tools,
                 messages=messages
             )
 
+            print(f"--- Stop reason: {response.stop_reason}")
+            print(f"--- Tool calls so far: {tool_calls_made}")
+            for block in response.content:
+                if block.type == "tool_use":
+                    print(f"--- Tool call: {block.name}")
+                elif hasattr(block, "text"):
+                    print(f"--- Text: {block.text[:200]}")
+
             if response.stop_reason == "tool_use":
-                # Add Claude's response to the conversation
                 messages.append({"role": "assistant", "content": response.content})
 
-                # Find and execute each tool call
                 tool_results = []
                 for block in response.content:
                     if block.type == "tool_use":
+                        tool_calls_made += 1
                         result = await self._execute_tool(block.name, block.input)
                         tool_results.append({
                             "type": "tool_result",
@@ -38,11 +58,13 @@ class Agent:
                             "content": str(result)
                         })
 
-                # Send tool results back to Claude
                 messages.append({"role": "user", "content": tool_results})
 
+            elif tool_calls_made < 4:
+                messages.append({"role": "assistant", "content": response.content})
+                messages.append({"role": "user", "content": "You haven't completed all steps yet. Call the next tool now."})
+
             else:
-                # Claude is done — extract the final text
                 final_text = ""
                 for block in response.content:
                     if hasattr(block, "text"):
