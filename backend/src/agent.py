@@ -13,6 +13,7 @@ class Agent:
         self.tools = [tool.schema() for tool in tools]
 
     async def run(self, goal: str):
+        import json as _json
         messages = [{"role": "user", "content": goal}]
         tool_calls_made = 0
 
@@ -27,11 +28,9 @@ class Agent:
                        "1. Call search_news exactly 2 times with different queries\n"
                        "2. Call deduplicate with all collected articles\n"
                        "3. Call categorize with the deduplicated articles\n"
-                       "4. Call summarize with the categorized articles\n"
-                       "5. ONLY after all 4 tool types have been called, return the final JSON briefing\n\n"
+                       "4. Call summarize with the categorized articles\n\n"
                        "IMPORTANT: After receiving tool results, immediately call the next tool. "
-                       "Do NOT call search_news more than 2 times. "
-                       "Never return plain text until step 5.",
+                       "Do NOT call search_news more than 2 times.",
                 tools=self.tools,
                 messages=messages
             )
@@ -52,10 +51,24 @@ class Agent:
                     if block.type == "tool_use":
                         tool_calls_made += 1
                         result = await self._execute_tool(block.name, block.input)
+                        result_str = str(result)
+
+                        # Return summarize output directly — no need for the agent to re-emit it
+                        if block.name == "summarize":
+                            try:
+                                stories = _json.loads(result_str)
+                                return _json.dumps({"stories": stories})
+                            except _json.JSONDecodeError:
+                                pass  # fall through if malformed
+
+                        # Truncate other large results to keep context manageable
+                        if len(result_str) > 5000:
+                            result_str = result_str[:5000] + "...(truncated)"
+
                         tool_results.append({
                             "type": "tool_result",
                             "tool_use_id": block.id,
-                            "content": str(result)
+                            "content": result_str
                         })
 
                 messages.append({"role": "user", "content": tool_results})
@@ -69,6 +82,11 @@ class Agent:
                 for block in response.content:
                     if hasattr(block, "text"):
                         final_text += block.text
+
+                import re
+                json_match = re.search(r'\{[\s\S]*\}', final_text)
+                if json_match:
+                    return json_match.group(0)
                 return final_text
 
     async def _execute_tool(self, tool_name: str, tool_input: dict):

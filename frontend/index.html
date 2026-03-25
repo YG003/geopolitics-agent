@@ -4,7 +4,39 @@
     <meta charset="UTF-8" />
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>frontend</title>
+    <title>GeoPulse — Intelligence Briefing</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,400;0,500;0,600;0,700;1,400;1,600&family=IBM+Plex+Mono:wght@300;400;500&family=Crimson+Pro:ital,wght@0,400;0,600;1,400&display=swap" rel="stylesheet" />
+    <style>
+      *, *::before, *::after { box-sizing: border-box; }
+      body { background: #060810; margin: 0; }
+
+      @keyframes fadeSlideUp {
+        from { opacity: 0; transform: translateY(16px); }
+        to   { opacity: 1; transform: translateY(0); }
+      }
+      @keyframes fadeIn {
+        from { opacity: 0; }
+        to   { opacity: 1; }
+      }
+      @keyframes spin {
+        from { transform: rotate(0deg); }
+        to   { transform: rotate(360deg); }
+      }
+      @keyframes amberPulse {
+        0%, 100% { opacity: 1; box-shadow: 0 0 6px rgba(200, 144, 58, 0.5); }
+        50%       { opacity: 0.6; box-shadow: 0 0 2px rgba(200, 144, 58, 0.2); }
+      }
+      @keyframes amberGlow {
+        0%, 100% { box-shadow: 0 0 0 0 rgba(200, 144, 58, 0); }
+        50%       { box-shadow: 0 0 22px 4px rgba(200, 144, 58, 0.18); }
+      }
+      @keyframes stepIn {
+        from { opacity: 0; transform: translateX(-10px); }
+        to   { opacity: 1; transform: translateX(0); }
+      }
+    </style>
   </head>
   <body>
     <div id="root"></div>

@@ -78,7 +78,10 @@ Example format:
         )
 
         try:
-            summaries = json.loads(response.content[0].text)
+            text = response.content[0].text.strip()
+            text = re.sub(r'^```(?:json)?\s*', '', text)
+            text = re.sub(r'\s*```$', '', text)
+            summaries = json.loads(text)
             for item in summaries:
                 idx = item.get("index", 0) - 1
                 if 0 <= idx < len(articles):

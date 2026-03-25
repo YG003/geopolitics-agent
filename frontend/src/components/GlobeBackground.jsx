@@ -1,223 +1,249 @@
-import { useEffect, useRef } from 'react'
+import { useEffect, useRef, useCallback } from 'react'
+import createGlobe from 'cobe'
+
+const MARKERS = [
+  { id: 'london',     location: [51.5,   -0.1],  label: 'London' },
+  { id: 'newyork',   location: [40.7,  -74.0],  label: 'New York' },
+  { id: 'moscow',    location: [55.75,  37.6],  label: 'Moscow' },
+  { id: 'beijing',   location: [39.9,  116.4],  label: 'Beijing' },
+  { id: 'kyiv',      location: [50.4,   30.5],  label: 'Kyiv' },
+  { id: 'tehran',    location: [35.7,   51.4],  label: 'Tehran' },
+  { id: 'dubai',     location: [25.3,   55.3],  label: 'Dubai' },
+  { id: 'singapore', location: [1.3,   103.8],  label: 'Singapore' },
+  { id: 'washington',location: [38.9,  -77.0],  label: 'Washington' },
+]
+
+const ARCS = [
+  { id: 'lon-mos',   from: [51.5,  -0.1],  to: [55.75, 37.6] },
+  { id: 'lon-nyc',   from: [51.5,  -0.1],  to: [40.7, -74.0] },
+  { id: 'nyc-was',   from: [40.7, -74.0],  to: [38.9, -77.0] },
+  { id: 'mos-bei',   from: [55.75, 37.6],  to: [39.9, 116.4] },
+  { id: 'mos-kyi',   from: [55.75, 37.6],  to: [50.4,  30.5] },
+  { id: 'teh-dub',   from: [35.7,  51.4],  to: [25.3,  55.3] },
+  { id: 'bei-sin',   from: [39.9, 116.4],  to: [1.3,  103.8] },
+  { id: 'lon-teh',   from: [51.5,  -0.1],  to: [35.7,  51.4] },
+]
+
+function projectMarker(lat, lon, phi, theta, canvasSize) {
+  const latR = lat * Math.PI / 180
+  const lonR = lon * Math.PI / 180
+
+  const x = Math.cos(latR) * Math.cos(lonR)
+  const y = Math.sin(latR)
+  const z = -Math.cos(latR) * Math.sin(lonR)
+
+  const cosPhi   = Math.cos(phi)
+  const sinPhi   = Math.sin(phi)
+  const cosTheta = Math.cos(theta)
+  const sinTheta = Math.sin(theta)
+
+  const c     = cosPhi * x + sinPhi * z
+  const s     = sinPhi * sinTheta * x + cosTheta * y - cosPhi * sinTheta * z
+  const depth = -sinPhi * cosTheta * x + sinTheta * y + cosPhi * cosTheta * z
+
+  return {
+    x: canvasSize * (c + 1) / 2,
+    y: canvasSize * (-s + 1) / 2,
+    visible: depth >= 0,
+    depth,
+  }
+}
 
 function GlobeBackground() {
   const canvasRef = useRef(null)
+  const labelEls  = useRef({})
+
+  const pointerInteracting = useRef(null)
+  const lastPointer        = useRef(null)
+  const dragOffset         = useRef({ phi: 0, theta: 0 })
+  const velocity           = useRef({ phi: 0, theta: 0 })
+  const phiOffsetRef       = useRef(0)
+  const thetaOffsetRef     = useRef(0)
+  const isPausedRef        = useRef(false)
+
+  const handlePointerDown = useCallback((e) => {
+    pointerInteracting.current = { x: e.clientX, y: e.clientY }
+    if (canvasRef.current) canvasRef.current.style.cursor = 'grabbing'
+    isPausedRef.current = true
+  }, [])
+
+  const handlePointerMove = useCallback((e) => {
+    if (pointerInteracting.current !== null) {
+      const deltaX = e.clientX - pointerInteracting.current.x
+      const deltaY = e.clientY - pointerInteracting.current.y
+      dragOffset.current = { phi: deltaX / 300, theta: deltaY / 1000 }
+      const now = Date.now()
+      if (lastPointer.current) {
+        const dt  = Math.max(now - lastPointer.current.t, 1)
+        const max = 0.15
+        velocity.current = {
+          phi:   Math.max(-max, Math.min(max, ((e.clientX - lastPointer.current.x) / dt) * 0.3)),
+          theta: Math.max(-max, Math.min(max, ((e.clientY - lastPointer.current.y) / dt) * 0.08)),
+        }
+      }
+      lastPointer.current = { x: e.clientX, y: e.clientY, t: now }
+    }
+  }, [])
+
+  const handlePointerUp = useCallback(() => {
+    if (pointerInteracting.current !== null) {
+      phiOffsetRef.current   += dragOffset.current.phi
+      thetaOffsetRef.current += dragOffset.current.theta
+      dragOffset.current = { phi: 0, theta: 0 }
+      lastPointer.current = null
+    }
+    pointerInteracting.current = null
+    if (canvasRef.current) canvasRef.current.style.cursor = 'grab'
+    isPausedRef.current = false
+  }, [])
 
   useEffect(() => {
+    window.addEventListener('pointermove', handlePointerMove, { passive: true })
+    window.addEventListener('pointerup',   handlePointerUp,   { passive: true })
+    return () => {
+      window.removeEventListener('pointermove', handlePointerMove)
+      window.removeEventListener('pointerup',   handlePointerUp)
+    }
+  }, [handlePointerMove, handlePointerUp])
+
+  useEffect(() => {
+    if (!canvasRef.current) return
     const canvas = canvasRef.current
-    const ctx = canvas.getContext('2d')
+    let globe = null
     let animationId
-    let time = 0
+    let phi = 0
+    const THETA = 0.2
 
-    const resize = () => {
-      canvas.width = window.innerWidth
-      canvas.height = window.innerHeight
-    }
-    resize()
-    window.addEventListener('resize', resize)
-
-    const cities = [
-      { lat: 51.5, lon: -0.1, name: 'London' },
-      { lat: 40.7, lon: -74, name: 'New York' },
-      { lat: 48.9, lon: 2.35, name: 'Paris' },
-      { lat: 55.75, lon: 37.6, name: 'Moscow' },
-      { lat: 39.9, lon: 116.4, name: 'Beijing' },
-      { lat: 35.7, lon: 139.7, name: 'Tokyo' },
-      { lat: 28.6, lon: 77.2, name: 'Delhi' },
-      { lat: -33.9, lon: 18.4, name: 'Cape Town' },
-      { lat: -23.5, lon: -46.6, name: 'São Paulo' },
-      { lat: 30, lon: 31.2, name: 'Cairo' },
-      { lat: 1.3, lon: 103.8, name: 'Singapore' },
-      { lat: 37.6, lon: 127, name: 'Seoul' },
-      { lat: 41, lon: 29, name: 'Istanbul' },
-      { lat: 19.4, lon: -99.1, name: 'Mexico City' },
-      { lat: -34.6, lon: -58.4, name: 'Buenos Aires' },
-      { lat: 35.7, lon: 51.4, name: 'Tehran' },
-      { lat: 33.3, lon: 44.4, name: 'Baghdad' },
-      { lat: 50.4, lon: 30.5, name: 'Kyiv' },
-      { lat: 59.9, lon: 30.3, name: 'St Petersburg' },
-      { lat: 25.3, lon: 55.3, name: 'Dubai' },
-      { lat: 52.5, lon: 13.4, name: 'Berlin' },
-      { lat: -1.3, lon: 36.8, name: 'Nairobi' },
-      { lat: 6.5, lon: 3.4, name: 'Lagos' },
-      { lat: -33.8, lon: 151.2, name: 'Sydney' },
-    ]
-
-    const points = [...cities]
-    for (let i = 0; i < 60; i++) {
-      points.push({
-        lat: (Math.random() - 0.5) * 160,
-        lon: (Math.random() - 0.5) * 360,
-        name: null,
-      })
-    }
-
-    const connections = []
-    for (let i = 0; i < cities.length; i++) {
-      for (let j = i + 1; j < cities.length; j++) {
-        const dist = Math.sqrt(
-          Math.pow(cities[i].lat - cities[j].lat, 2) +
-          Math.pow(cities[i].lon - cities[j].lon, 2)
-        )
-        if (dist < 80) connections.push([i, j])
-      }
-    }
-
-    const toRad = (deg) => (deg * Math.PI) / 180
-
-    const project = (lat, lon, rotation) => {
-      const phi = toRad(90 - lat)
-      const theta = toRad(lon + rotation)
-      const radius = Math.min(canvas.width, canvas.height) * 0.45
-
-      const x = radius * Math.sin(phi) * Math.cos(theta)
-      const y = radius * Math.cos(phi)
-      const z = radius * Math.sin(phi) * Math.sin(theta)
-
-      const visible = z > -radius * 0.1
-
-      return {
-        x: canvas.width * 0.5 + x,
-        y: canvas.height * 0.5 - y,
-        z,
-        visible,
-        depth: (z + radius) / (2 * radius),
-      }
-    }
-
-    const draw = () => {
-      ctx.clearRect(0, 0, canvas.width, canvas.height)
-      time += 0.15
-      const rotation = time
-
-      const centerX = canvas.width * 0.5
-      const centerY = canvas.height * 0.5
-      const radius = Math.min(canvas.width, canvas.height) * 0.45
-
-      // Globe outline
-      ctx.beginPath()
-      ctx.arc(centerX, centerY, radius, 0, Math.PI * 2)
-      ctx.strokeStyle = 'rgba(220, 38, 38, 0.3)'
-      ctx.lineWidth = 1
-      ctx.stroke()
-
-      // Latitude lines
-      for (let lat = -60; lat <= 60; lat += 30) {
-        ctx.beginPath()
-        let started = false
-        for (let lon = -180; lon <= 180; lon += 3) {
-          const p = project(lat, lon, rotation)
-          if (p.visible) {
-            if (!started) { ctx.moveTo(p.x, p.y); started = true }
-            else ctx.lineTo(p.x, p.y)
-          } else started = false
-        }
-        ctx.strokeStyle = 'rgba(220, 38, 38, 0.04)'
-        ctx.lineWidth = 0.5
-        ctx.stroke()
-      }
-
-      // Longitude lines
-      for (let lon = -180; lon < 180; lon += 30) {
-        ctx.beginPath()
-        let started = false
-        for (let lat = -90; lat <= 90; lat += 3) {
-          const p = project(lat, lon, rotation)
-          if (p.visible) {
-            if (!started) { ctx.moveTo(p.x, p.y); started = true }
-            else ctx.lineTo(p.x, p.y)
-          } else started = false
-        }
-        ctx.strokeStyle = 'rgba(220, 38, 38, 0.04)'
-        ctx.lineWidth = 0.5
-        ctx.stroke()
-      }
-
-      // Project all points
-      const projected = points.map((p) => project(p.lat, p.lon, rotation))
-
-      // Draw connections
-      connections.forEach(([i, j]) => {
-        const a = projected[i]
-        const b = projected[j]
-        if (a.visible && b.visible) {
-          const alpha = Math.min(a.depth, b.depth) * 0.25
-          ctx.beginPath()
-          ctx.moveTo(a.x, a.y)
-          ctx.lineTo(b.x, b.y)
-          ctx.strokeStyle = `rgba(220, 38, 38, ${alpha})`
-          ctx.lineWidth = 0.5
-          ctx.stroke()
-
-          // Pulse along connection
-          const pulse = (Math.sin(time * 0.05 + i + j) + 1) / 2
-          const px = a.x + (b.x - a.x) * pulse
-          const py = a.y + (b.y - a.y) * pulse
-          ctx.beginPath()
-          ctx.arc(px, py, 1.2, 0, Math.PI * 2)
-          ctx.fillStyle = `rgba(248, 113, 113, ${alpha * 1.5})`
-          ctx.fill()
+    function updateLabels(currentPhi, currentTheta) {
+      const size = canvas.offsetWidth
+      MARKERS.forEach((m) => {
+        const el = labelEls.current[m.id]
+        if (!el) return
+        const p = projectMarker(m.location[0], m.location[1], currentPhi, currentTheta, size)
+        if (p.visible && p.depth > 0.05) {
+          const opacity = Math.min(1, (p.depth - 0.05) / 0.3)
+          el.style.left    = p.x + 'px'
+          el.style.top     = p.y + 'px'
+          el.style.opacity = opacity
+        } else {
+          el.style.opacity = '0'
         }
       })
+    }
 
-      // Draw points and city labels
-      projected.forEach((p, i) => {
-        if (!p.visible) return
-        const isCity = i < cities.length
-        const size = isCity ? 2.5 : 1
-        const alpha = p.depth * (isCity ? 0.7 : 0.3)
+    function init() {
+      const width = canvas.offsetWidth
+      if (width === 0 || globe) return
 
-        // Point
-        ctx.beginPath()
-        ctx.arc(p.x, p.y, size, 0, Math.PI * 2)
-        ctx.fillStyle = `rgba(248, 113, 113, ${alpha})`
-        ctx.fill()
+      const dpr = Math.min(window.devicePixelRatio || 1, 2)
+      globe = createGlobe(canvas, {
+        devicePixelRatio: dpr,
+        width,
+        height: width,
+        phi:   0,
+        theta: THETA,
+        dark:  1,
+        diffuse: 1.2,
+        mapSamples:    16000,
+        mapBrightness: 6,
+        baseColor:   [0.42, 0.30, 0.12],
+        markerColor: [0.88, 0.62, 0.22],
+        glowColor:   [0.48, 0.34, 0.10],
+        arcColor:    [0.88, 0.62, 0.22],
+        markerElevation: 0.01,
+        arcWidth:  0.55,
+        arcHeight: 0.25,
+        markers: MARKERS.map((m) => ({ location: m.location, size: 0.022, id: m.id })),
+        arcs:    ARCS.map((a)    => ({ from: a.from, to: a.to, id: a.id })),
+        opacity: 0.9,
+      })
 
-        // City glow and label
-        if (isCity) {
-          ctx.beginPath()
-          ctx.arc(p.x, p.y, 6, 0, Math.PI * 2)
-          ctx.fillStyle = `rgba(220, 38, 38, ${alpha * 0.12})`
-          ctx.fill()
-
-          // Flicker effect
-          const flicker = Math.sin(time * 0.08 + i * 2.7) * 0.5 + 0.5
-          const labelAlpha = p.depth * 0.6 * flicker
-
-          if (labelAlpha > 0.15) {
-            const labelOffsetX = 12
-            const labelOffsetY = -8
-            ctx.beginPath()
-            ctx.moveTo(p.x + 3, p.y - 3)
-            ctx.lineTo(p.x + labelOffsetX, p.y + labelOffsetY)
-            ctx.strokeStyle = `rgba(248, 113, 113, ${labelAlpha * 0.5})`
-            ctx.lineWidth = 0.5
-            ctx.stroke()
-
-            ctx.font = '9px monospace'
-            ctx.fillStyle = `rgba(248, 113, 113, ${labelAlpha})`
-            ctx.fillText(cities[i].name.toUpperCase(), p.x + labelOffsetX + 2, p.y + labelOffsetY + 3)
+      function animate() {
+        if (!isPausedRef.current) {
+          phi += 0.003
+          if (Math.abs(velocity.current.phi)   > 0.0001 ||
+              Math.abs(velocity.current.theta) > 0.0001) {
+            phiOffsetRef.current   += velocity.current.phi
+            thetaOffsetRef.current += velocity.current.theta
+            velocity.current.phi   *= 0.95
+            velocity.current.theta *= 0.95
           }
+          const tMin = -0.4, tMax = 0.4
+          if      (thetaOffsetRef.current < tMin) thetaOffsetRef.current += (tMin - thetaOffsetRef.current) * 0.1
+          else if (thetaOffsetRef.current > tMax) thetaOffsetRef.current += (tMax - thetaOffsetRef.current) * 0.1
         }
-      })
 
-      animationId = requestAnimationFrame(draw)
+        const currentPhi   = phi + phiOffsetRef.current + dragOffset.current.phi
+        const currentTheta = THETA + thetaOffsetRef.current + dragOffset.current.theta
+
+        globe.update({ phi: currentPhi, theta: currentTheta })
+        updateLabels(currentPhi, currentTheta)
+
+        animationId = requestAnimationFrame(animate)
+      }
+
+      animate()
+      setTimeout(() => canvas && (canvas.style.opacity = '1'))
     }
 
-    draw()
+    if (canvas.offsetWidth > 0) {
+      init()
+    } else {
+      const ro = new ResizeObserver((entries) => {
+        if (entries[0]?.contentRect.width > 0) { ro.disconnect(); init() }
+      })
+      ro.observe(canvas)
+    }
 
     return () => {
-      cancelAnimationFrame(animationId)
-      window.removeEventListener('resize', resize)
+      if (animationId) cancelAnimationFrame(animationId)
+      if (globe) globe.destroy()
     }
   }, [])
 
   return (
-    <canvas
-      ref={canvasRef}
-      className="absolute inset-0 pointer-events-none"
-      style={{ opacity: 0.85 }}
-    />
+    <div className="absolute inset-0 flex items-center justify-center overflow-hidden pointer-events-none">
+      <div
+        style={{ width: '90vmin', height: '90vmin', position: 'relative', pointerEvents: 'auto' }}
+        className="select-none"
+      >
+        <canvas
+          ref={canvasRef}
+          onPointerDown={handlePointerDown}
+          style={{
+            display: 'block',
+            width: '100%',
+            height: '100%',
+            cursor: 'grab',
+            opacity: 0,
+            transition: 'opacity 1.2s ease',
+            borderRadius: '50%',
+            touchAction: 'none',
+          }}
+        />
+        {MARKERS.map((m) => (
+          <div
+            key={m.id}
+            ref={(el) => { labelEls.current[m.id] = el }}
+            style={{
+              position: 'absolute',
+              transform: 'translate(8px, -50%)',
+              pointerEvents: 'none',
+              fontFamily: 'IBM Plex Mono, monospace',
+              fontSize: '9px',
+              color: 'rgba(200, 144, 58, 0.75)',
+              letterSpacing: '0.12em',
+              textTransform: 'uppercase',
+              whiteSpace: 'nowrap',
+              opacity: 0,
+              transition: 'opacity 0.3s',
+            }}
+          >
+            {m.label}
+          </div>
+        ))}
+      </div>
+    </div>
   )
 }
 
